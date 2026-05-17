@@ -122,8 +122,6 @@ class SamuraiRun:
                 obstacle.move(self.speed)
 
 
-
-
     def draw(self):
         if self.game_state == "main_menu":
             self.screen.blit(self.start_menu, (0, 0))

@@ -163,6 +163,7 @@ while run:
                     state_over = True
                     music_stop_check = False
 
+
             # DRAW ANIMATION -------
             if chr_run:
                 screen.blit(run_image, player_rect)
