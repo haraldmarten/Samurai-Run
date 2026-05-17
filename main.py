@@ -1,154 +1,108 @@
 import pygame
 import random
-pygame.init()
+from constants import SCREEN_WIDTH, SCREEN_HEIGHT, GRAVITY, JUMP_HEIGHT
+from old_main import keys_pressed, jump_sound_check
+from player import Player
+from obstacle import Obstacle
 
-screen = pygame.display.set_mode((1280, 720))
-pygame.display.set_caption("Samurai Run")
+class SamuraiRun:
+    def __init__(self):
 
-clock = pygame.time.Clock()
+        # SCREEN
+        pygame.init()
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Samurai Run")
 
-jump_sound = pygame.mixer.Sound('assets/jump_sound_2.wav')
-jump_sound.set_volume(0.6)
-jump_sound_check = True
+        # VARIABLES
+        self.score = 0
+        self.high_score = 0
+        self.game_running = True
+        self.gravity = GRAVITY
+        self.jump_height = JUMP_HEIGHT
+        self.game_state = "main_menu"
+        self.background_image_x = 0
+        self.paused = False
+        self.jump_sound_check = True
+        self.slide_sound_check = True
+        self.speed = 10
 
-slide_sound = pygame.mixer.Sound('assets/slide_sound.mp3')
-slide_sound.set_volume(0.1)
-slide_sound_check = True
+        # PLAYER STATES
+        self.run = Player(self, "assets/samurai_run.png", True)
+        self.jump = Player(self,"assets/samurai_jump.png", False, "assets/jump_sound_2.wav")
+        self.slide = Player(self, "assets/samurai_slide.png", False, "assets/slide_sound.mp3")
 
-pygame.mixer.music.load('assets/backgroundmusic.wav')
-pygame.mixer.music.set_volume(0.5)
+        # OBSTACLES
+        self.obstacles = [
+            Obstacle(self, "obstacle_images/blade_1.png", 1280),
+            Obstacle(self, "obstacle_images/blade_2.png", 1280),
+            Obstacle(self, "obstacle_images/blade_3.png", 1280),
+            Obstacle(self, "spikes_1.png", 1280),
+            Obstacle(self, "spikes_2.png", 1280),
+            Obstacle(self, "swinging_blade.png", 1280, 0),
+            Obstacle(self, "swinging_spike_block.png", 1280),
+            Obstacle(self, "swinging_spike_block_2.png", 1280, 0),
+            Obstacle(self, "swinging_spike_stick.png", 1280)
+        ]
+        self.active_obstacles = []
 
-run_image = pygame.transform.scale(pygame.image.load("assets/samurai_run.png"), (100, 100))
-jump_image = pygame.transform.scale(pygame.image.load("assets/samurai_jump.png"), (100, 100))
-slide_image = pygame.transform.scale(pygame.image.load("assets/samurai_slide.png"), (100, 100))
-background_image = pygame.image.load("assets/best_background.png")
+        # FONT
+        self.font1 = pygame.font.Font(None, 200)
+        self.font2 = pygame.font.Font(None, 50)
+        self.font3 = pygame.font.Font(None, 75)
 
-font = pygame.font.Font(None, 200)
-font2 = pygame.font.Font(None, 78)
+        # UI
+        self.platform_rect = pygame.Rect(0, 520, 1280, 200)
+        self.score_rect = pygame.Rect(870, 10, 400, 125)
+        self.start_menu = pygame.image.load('assets/start_menu.png')
+        self.pause_text = self.font1.render("PAUSED", True, (30, 30, 30))
+        self.high_score_text = self.font2.render(f"High Score: {self.high_score}", True, (30, 30, 30))
+        self.score_text = self.font2.render(f"Score: {self.score}", True, (30, 30, 30))
+        self.background_image = pygame.image.load('assets/moving_background.png')
+        self.game_over_text = self.font1.render("GAME OVER", True, (30, 30, 30))
+        self.restart_text = self.font3.render("Press 'r' to restart", True, (30, 30, 30))
 
-obstacle_1 = pygame.Rect(1280, 0, 300, 450)
-obstacle_2 = pygame.Rect(1280, 410, 160, 110)
-obstacle_3 = pygame.Rect(1280, 300, 180, 220)
-obstacle_4 = pygame.Rect(1280, 470, 60, 50)
-obstacle_5 = pygame.Rect(1280, 450, 300, 70)
-obstacle_6 = pygame.Rect(1280, 250, 100, 100)
+        # OTHER
+        self.death_sound = pygame.mixer.Sound('assets/death_sound.wav')
+        self.jump_sound = pygame.mixer.Sound('assets/jump_sound_2.wav')
+        self.slide_sound = pygame.mixer.Sound('slide_sound.mp3')
+        self.clock = pygame.time.Clock()
+        pygame.mixer.music.load("assets/backgroundmusic.wav")
 
-obstacles = [obstacle_1, obstacle_2, obstacle_3, obstacle_4, obstacle_5, obstacle_6]
-game_obstacles = []
-
-player_rect = run_image.get_rect(bottom=725, right=500)
-player_rect.y = 430
-platform_rect = pygame.Rect(0, 520, 1280, 200)
-player_hitbox = player_rect.copy()
-
-chr_run = True
-chr_jump = False
-chr_slide = False
-
-run = True
-
-gravity = 1
-jump_height = 25
-velocity = jump_height
-speed = 10
-
-state_run = True
-state_over = False
-last_spawned = 0
-
-score = 0
-
-background_image_x = 0
-score_rect = pygame.Rect(870, 25, 400, 100)
-
-time_check_2 = 0
-
-death_sound = pygame.mixer.Sound('assets/death_sound.wav')
-music_stop_check = True
-
-screen_state = True # Main menu --- False = Game
-
-start_menu = pygame.image.load('assets/start_menu.png')
-
-can_jump = False
-
-while run:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            run = False
-    if screen_state:
-        screen.blit(start_menu, (0,0))
-        plyr_input_67 = pygame.key.get_pressed()
-        if plyr_input_67[pygame.K_SPACE]:
-            screen_state = False
-            can_jump = True
-    elif not screen_state:
-        if not pygame.mixer.music.get_busy() and music_stop_check:
+    def update(self):
+        player_input = pygame.key.get_pressed()
+        if not pygame.mixer.music.get_busy():
             pygame.mixer.music.play()
-        score_text = font2.render(f"Score: {score}", True, (30, 30, 30))
-        screen.blit(background_image, (background_image_x,0))
-        screen.blit(background_image, (background_image_x + 1280,0))
-        background_image_x -= .5
-        if background_image_x <= -1280:
-            background_image_x = 0
-        pygame.draw.rect(screen, (122, 122, 122), platform_rect)
-        current_time = pygame.time.get_ticks()
-        if state_run and not state_over:
-            time_rn = pygame.time.get_ticks()
-            if time_rn - time_check_2 >= 10000:
-                speed += 1
-                time_check_2 = time_rn
-            score += 1
-            keys_pressed = pygame.key.get_pressed()
-            # JUMP -----
-            if keys_pressed[pygame.K_SPACE]:
-                chr_jump = True
-                chr_run = False
-                chr_slide = False
-                player_hitbox = pygame.Rect(player_rect.x + 30, player_rect.y + 30, player_rect.width - 40, player_rect.height - 40)
-                if jump_sound_check:
-                    jump_sound.play()
-                    jump_sound_check = False
-                    slide_sound_check = True
-
-            # SLIDE -----
-            if keys_pressed[pygame.K_LCTRL] and not chr_jump:
-                chr_slide = True
-                chr_jump = False
-                chr_run = False
-                player_hitbox = pygame.Rect(player_rect.x, player_rect.y + 50, player_rect.width, player_rect.height - 50)
-                if slide_sound_check:
-                    slide_sound.play()
-                    slide_sound_check = False
-            elif not chr_jump:
-                chr_slide = False
-                chr_run = True
-                player_hitbox = player_rect.copy()
-                slide_sound_check = True
-            # OBSTACLES -----
-            if current_time - last_spawned > 1000:
-                rnd_obs = random.choice(obstacles)
-                new_obs = rnd_obs.copy()
-                game_obstacles.append(new_obs)
-                last_spawned = current_time
-
-            for obstacle in game_obstacles[:]:
-                obstacle.x -= speed
-                if obstacle.right <= 0:
-                    game_obstacles.remove(obstacle)
-            # HIT DETECTION ------
-            if game_obstacles:
-                if game_obstacles[0].colliderect(player_hitbox):
-                    death_sound.play()
-                    pygame.mixer.music.stop()
-                    state_run = False
-                    state_over = True
-                    music_stop_check = False
-
-            # DRAW ANIMATION -------
-            if chr_run:
-                screen.blit(run_image, player_rect)
-            elif chr_jump:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.game_running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE and self.game_state == "samurai_run":
+                    self.paused = not self.paused
+                    if self.paused:
+                        pygame.mixer.music.pause()
+                    else:
+                        pygame.mixer.music.unpause()
+        if self.game_state == "main_menu":
+            if player_input[pygame.K_SPACE]:
+                self.game_state = "samurai_run"
+        elif self.game_state == "samurai_run":
+            if player_input[pygame.K_SPACE]:
+                self.jump.active = True
+                self.run.active = False
+                self.slide.active = False
+                self.jump.update_rect(100, 80, self.jump.rect.x, self.jump.rect.y)
+                if self.jump_sound_check:
+                    self.jump.sound.play()
+                    self.jump_sound_check = False
+                    self.slide_sound_check = True
+            if player_input[pygame.K_LCTRL] and not self.jump.active:
+                self.jump.active = False
+                self.run.active = True
+                self.slide.active = False
+                self.slide.update_rect(100, 50, self.slide.rect.x, self.slide.rect.y + 50)
+                if self.slide_sound_check:
+                    self.slide.sound.play()
+                    self.slide_sound_check = False
                 player_rect.y -= velocity
                 velocity -= gravity
                 if velocity < -jump_height:
@@ -157,39 +111,42 @@ while run:
                     player_hitbox = player_rect.copy()
                     chr_run = True
                     jump_sound_check = True
-                screen.blit(jump_image, player_rect)
-            elif chr_slide:
-                screen.blit(slide_image, player_rect)
-            # DRAW OBSTACLE ------
-            if game_obstacles:
-                for obstacle in game_obstacles:
-                    pygame.draw.rect(screen, (0,0,0), obstacle)
-            pygame.draw.rect(screen, (122, 122, 122), score_rect)
-            screen.blit(score_text, (900, 50))
-        elif state_over:
-            game_over_text = font.render("GAME OVER", True, (30, 30, 30))
-            screen.blit(game_over_text, (200, 200))
-            inputs = pygame.key.get_pressed()
-            pygame.draw.rect(screen, (122, 122, 122), score_rect)
-            screen.blit(score_text, (900, 50))
-            r_text = font2.render("Press 'r' to restart", True, (30, 30, 30))
-            screen.blit(r_text, (400 , 350))
-            if inputs[pygame.K_r]:
-                game_obstacles.clear()
-                speed = 10
-                velocity = jump_height
-                chr_run = True
-                chr_jump = False
-                chr_slide = False
-                player_rect.y = 430
-                player_hitbox = player_rect.copy()
-                last_spawned = pygame.time.get_ticks()
-                state_run = True
-                state_over = False
-                score = 0
-                jump_sound_check = True
-                music_stop_check = True
-    pygame.display.flip()
-    clock.tick(60)
+            elif not self.jump.active:
+                self.slide.active = False
+                self.run.active = True
+            for obstacle in self.active_obstacles:
+                if obstacle.check_collision(self):
+                    self.death_sound.play()
+                    pygame.mixer.music.stop()
+                    self.game_state = "restart_menu"
+                obstacle.move(self.speed)
 
-pygame.quit()
+
+
+
+    def draw(self):
+        if self.game_state == "main_menu":
+            self.screen.blit(self.start_menu, (0, 0))
+        elif self.game_state == "samurai_run":
+            if self.paused:
+                self.screen.blit(self.pause_text, (400, 200))
+            else:
+                self.screen.blit(self.background_image, (self.background_image_x, 0))
+                self.screen.blit(self.background_image, (self.background_image_x + 1280, 0))
+                pygame.draw.rect(self.screen, (122, 122, 122), self.platform_rect)
+                for obstacle in self.active_obstacles:
+                    obstacle.draw()
+                pygame.draw.rect(self.screen, (122, 122, 122), self.score_rect)
+                self.screen.blit(self.score_text, (900, 25))
+                self.screen.blit(self.high_score_text, (900, 75))
+                if self.run:
+                    self.run.draw()
+                elif self.jump:
+                    self.jump.draw()
+                elif self.slide:
+                    self.slide.draw()
+        elif self.game_state == "restart_menu":
+            self.screen.blit(self.game_over_text, (0, 0))
+            self.screen.blit(self.restart_text, (400, 350))
+        pygame.display.flip()
+        self.clock.tick(60)
